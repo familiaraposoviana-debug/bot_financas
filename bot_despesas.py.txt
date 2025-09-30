@@ -1,0 +1,148 @@
+import csv
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+
+# Etapas da conversa
+TIPO, CATEGORIA, SUBCATEGORIA, VALOR, DESCRICAO = range(5)
+
+# Categorias e subcategorias
+categorias = {
+    "Receita": [
+        "JONARA", "NEMAK - Adiantamento Salário", "NEMAK - Salário", "NEMAK - 13º Salário",
+        "NEMAK - Férias", "NEMAK - Flash Card", "NEMAK - Outros",
+        "IURI - Pensão alimentícia", "ARTUR - Pensão alimentícia",
+        "TRANSPORTE - Cobrança", "OUTRAS Entradas", "GABRIEL",
+        "DHL - Salário", "DHL - 13º Salário", "DHL - Férias", "DHL - Flash Card",
+        "DHL - Outros", "OUTRAS Entradas"
+    ],
+    "Despesa": {
+        "Moradia": ["Financiamento Apto", "Condomínio", "Energia", "Internet | Apto",
+                    "Celular | Jonara", "Celular | Gabriel", "Gás", "Diária - Faxina",
+                    "Diária - Babá", "Mobília", "Reparos", "Outros"],
+        "Educação": ["Mensalidade Escola | Iuri", "Mensalidade Escola | João", "Mensalidade Escola | Artur",
+                     "Mensalidade Integral | Artur", "Outros Cursos", "Ativadade Extracurricular",
+                     "Excursões", "Material escolar", "Livros", "Uniformes", "Outros"],
+        "Cotidiano": ["Supermercado", "Açougue", "Sacolão", "Padaria", "Produtos de farmácia", "Outros"],
+        "Deslocamento": ["Financiamento Carro", "IPVA", "Seguro", "Combustível", "Manutenção Preventiva",
+                         "Reparos", "Multas", "Estacionamento", "Lavagem", "Uber", "Outros"],
+        "Saúde": ["Consultas | Geral", "Remédios | Geral", "Exames", "Higiene pessoal", "Outros cuidados pessoais",
+                  "Consultas | Autismo", "Terapia | Psicólogo", "Terapia | T.O", "Terapia | Fonoaudióloga",
+                  "Remédios | Autismo", "Outros"],
+        "Lazer e Outros": ["Viagens", "Cinema | Shows", "Restaurante | Delivery", "Presentes",
+                           "Cursos | Hobbies", "Jogos | Brinquedos", "Auto cuidado | Beleza",
+                           "Roupas | Calçados", "Festa de aniversário", "Doações", "Outros"],
+        "Reservas": ["Poupança | Iuri", "Poupança | Artur", "Poupança | João", "Poupança | Família",
+                     "Fundo de Emergência", "Outros"],
+        "Dívidas": ["Negociação 1", "Negociação 2", "Negociação 3", "Negociação 4",
+                    "Cartão Porto Seguro | Jonara", "Cartão Nubank | Jonara",
+                    "Cartão Santander | Gabriel", "Outros"]
+    }
+}
+
+# Dicionário temporário para guardar dados da conversa
+user_data_temp = {}
+
+def start(update: Update, context: CallbackContext):
+    keyboard = [
+        [InlineKeyboardButton("Receita", callback_data='Receita')],
+        [InlineKeyboardButton("Despesa", callback_data='Despesa')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text("Olá! Escolha o tipo de registro:", reply_markup=reply_markup)
+    return TIPO
+
+def tipo_callback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    user_data_temp['tipo'] = query.data
+
+    if query.data == "Receita":
+        # Mostra todas as receitas como botões
+        buttons = [[InlineKeyboardButton(cat, callback_data=cat)] for cat in categorias["Receita"]]
+    else:
+        # Mostra categorias principais de despesas
+        buttons = [[InlineKeyboardButton(cat, callback_data=cat)] for cat in categorias["Despesa"].keys()]
+
+    query.edit_message_text("Escolha a categoria:", reply_markup=InlineKeyboardMarkup(buttons))
+    return CATEGORIA
+
+def categoria_callback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    user_data_temp['categoria'] = query.data
+
+    if user_data_temp['tipo'] == "Receita":
+        # Para receita, não tem subcategoria, vai direto pedir valor
+        query.edit_message_text("Digite o valor da receita:")
+        return VALOR
+    else:
+        # Para despesa, mostra subcategorias
+        subcats = categorias["Despesa"][query.data]
+        buttons = [[InlineKeyboardButton(sub, callback_data=sub)] for sub in subcats]
+        query.edit_message_text("Escolha a subcategoria:", reply_markup=InlineKeyboardMarkup(buttons))
+        return SUBCATEGORIA
+
+def subcategoria_callback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    user_data_temp['subcategoria'] = query.data
+    query.edit_message_text("Digite o valor da despesa:")
+    return VALOR
+
+def valor_input(update: Update, context: CallbackContext):
+    user_data_temp['valor'] = update.message.text
+    update.message.reply_text("Digite uma descrição opcional (ou /skip para pular):")
+    return DESCRICAO
+
+def descricao_input(update: Update, context: CallbackContext):
+    user_data_temp['descricao'] = update.message.text
+    salvar_registro(user_data_temp)
+    update.message.reply_text("Registro salvo com sucesso!")
+    return ConversationHandler.END
+
+def skip_descricao(update: Update, context: CallbackContext):
+    user_data_temp['descricao'] = ""
+    salvar_registro(user_data_temp)
+    update.message.reply_text("Registro salvo com sucesso!")
+    return ConversationHandler.END
+
+def salvar_registro(data):
+    # Salva os dados em CSV
+    with open("despesas.csv", "a", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile)
+        if data['tipo'] == "Receita":
+            writer.writerow([data['tipo'], data['categoria'], "", data['valor'], data['descricao']])
+        else:
+            writer.writerow([data['tipo'], data['categoria'], data['subcategoria'], data['valor'], data['descricao']])
+
+def cancelar(update: Update, context: CallbackContext):
+    update.message.reply_text("Operação cancelada.")
+    return ConversationHandler.END
+
+def main():
+    TOKEN = "7553292124:AAEsEFdYeFVf10KJ8hirbwpDwoeX0lNUk3o"
+    updater = Updater(TOKEN, use_context=True)
+
+    dp = updater.dispatcher
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('add', start)],
+        states={
+            TIPO: [CallbackQueryHandler(tipo_callback)],
+            CATEGORIA: [CallbackQueryHandler(categoria_callback)],
+            SUBCATEGORIA: [CallbackQueryHandler(subcategoria_callback)],
+            VALOR: [MessageHandler(Filters.text & ~Filters.command, valor_input)],
+            DESCRICAO: [
+                MessageHandler(Filters.text & ~Filters.command, descricao_input),
+                CommandHandler('skip', skip_descricao)
+            ]
+        },
+        fallbacks=[CommandHandler('cancel', cancelar)]
+    )
+
+    dp.add_handler(conv_handler)
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
