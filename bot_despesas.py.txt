@@ -120,7 +120,8 @@ def cancelar(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 def main():
-    TOKEN = "7553292124:AAEsEFdYeFVf10KJ8hirbwpDwoeX0lNUk3o"
+    import os
+    TOKEN = os.environ.get("TELEGRAM_TOKEN")
     updater = Updater(TOKEN, use_context=True)
 
     dp = updater.dispatcher
@@ -146,3 +147,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
